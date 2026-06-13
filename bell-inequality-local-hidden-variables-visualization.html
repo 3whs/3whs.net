@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Angle Wedge Layer Test</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
+      font-family: system-ui, sans-serif;
+    }
+
+    #canvasStack {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: black;
+    }
+
+    #canvasStack canvas {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+    }
+
+    #wedgeCanvas {
+      z-index: 1;
+    }
+
+    #lineCanvas {
+      z-index: 2;
+    }
+
+    #controls {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    #controls label {
+      display: block;
+      user-select: none;
+    }
+
+    #diffControl {
+      margin-top: 8px;
+    }
+
+    #diffInput {
+      width: 64px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="canvasStack">
+    <canvas id="wedgeCanvas"></canvas>
+    <canvas id="lineCanvas"></canvas>
+  </div>
+
+  <div id="controls">
+    <label>
+      <input type="checkbox" id="toggleWedges" checked>
+      wedges
+    </label>
+
+    <label>
+      <input type="checkbox" id="toggleLines" checked>
+      lines
+    </label>
+
+    <div id="diffControl">
+      <label>
+        diff:
+        <input type="number" id="diffInput" min="0" max="179" step="1" value="15">
+      </label>
+    </div>
+  </div>
+
+  <script>
+    const wedgeCanvas = document.getElementById("wedgeCanvas");
+    const lineCanvas = document.getElementById("lineCanvas");
+
+    const wedgeCtx = wedgeCanvas.getContext("2d");
+    const lineCtx = lineCanvas.getContext("2d");
+
+    const toggleWedges = document.getElementById("toggleWedges");
+    const toggleLines = document.getElementById("toggleLines");
+    const diffInput = document.getElementById("diffInput");
+
+    const allCanvases = [
+      wedgeCanvas,
+      lineCanvas
+    ];
+
+    const allContexts = [
+      wedgeCtx,
+      lineCtx
+    ];
+
+    let diff = 15;
+
+    const state =
+      "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" +
+      "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111" +
+      "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" +
+      "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111";
+
+    function generateData(diff) {
+      const data = [];
+
+      for (let anglePrimary = 0; anglePrimary < 180; anglePrimary++) {
+        const angleMirror = anglePrimary + 180;
+        const anglePrimaryState = Number(state[anglePrimary]);
+
+        const apNegPair = (anglePrimary - diff + 360) % 360;
+        const apPosPair = (anglePrimary + diff) % 360;
+        const amNegPair = (angleMirror - diff + 360) % 360;
+        const amPosPair = (angleMirror + diff) % 360;
+
+        data.push({
+          line: [
+            anglePrimary,
+            angleMirror,
+            anglePrimaryState
+          ],
+          wedges: [
+            [
+              anglePrimary,
+              apNegPair,
+              Number(anglePrimaryState === 1 - Number(state[apNegPair]))
+            ],
+            [
+              anglePrimary,
+              apPosPair,
+              Number(anglePrimaryState === 1 - Number(state[apPosPair]))
+            ],
+            [
+              angleMirror,
+              amNegPair,
+              Number(anglePrimaryState === 1 - Number(state[amNegPair]))
+            ],
+            [
+              angleMirror,
+              amPosPair,
+              Number(anglePrimaryState === 1 - Number(state[amPosPair]))
+            ]
+          ]
+        });
+      }
+
+      return data;
+    }
+
+    function getLineColor(lineState) {
+      return lineState === 1 ? "green" : "red";
+    }
+
+    function degToRad(degrees) {
+      return degrees * Math.PI / 180;
+    }
+
+    function canvasAngle(degrees) {
+      return -degToRad(degrees);
+    }
+
+    function normalizeAngle(angle) {
+      return ((angle % 360) + 360) % 360;
+    }
+
+    function pointOnAngle(angle, distance) {
+      const radians = degToRad(angle);
+
+      return {
+        x: Math.cos(radians) * distance,
+        y: -Math.sin(radians) * distance
+      };
+    }
+
+    function shortestAngleDiff(fromAngle, toAngle) {
+      return ((toAngle - fromAngle + 540) % 360) - 180;
+    }
+
+	function getOppositeLineColor(lineState) {
+	  return lineState === 1 ? "red" : "green";
+	}
+
+	function drawLineSegment(ctx, angle, innerRadius, outerRadius, lineState) {
+	  const midRadius = innerRadius + (outerRadius - innerRadius) / 2;
+
+	  const innerPoint = pointOnAngle(angle, innerRadius);
+	  const midPoint = pointOnAngle(angle, midRadius);
+	  const outerPoint = pointOnAngle(angle, outerRadius);
+
+	  // First half: original line color
+	  ctx.beginPath();
+	  ctx.moveTo(innerPoint.x, innerPoint.y);
+	  ctx.lineTo(midPoint.x, midPoint.y);
+	  ctx.strokeStyle = getLineColor(lineState);
+	  ctx.lineWidth = 2;
+	  ctx.stroke();
+
+	  // Second half: opposite line color
+	  ctx.beginPath();
+	  ctx.moveTo(midPoint.x, midPoint.y);
+	  ctx.lineTo(outerPoint.x, outerPoint.y);
+	  ctx.strokeStyle = getOppositeLineColor(lineState);
+	  ctx.lineWidth = 2;
+	  ctx.stroke();
+	}
+
+    function drawLine(ctx, angleA, angleB, innerRadius, outerRadius, lineState) {
+      drawLineSegment(ctx, angleA, innerRadius, outerRadius, lineState);
+      drawLineSegment(ctx, angleB, innerRadius, outerRadius, lineState);
+    }
+
+    function createAngleBins(angleStep) {
+      const binCount = Math.round(360 / angleStep);
+
+      return Array.from({ length: binCount }, () => ({
+        red: 0,
+        green: 0
+      }));
+    }
+
+    function accumulateWedgeInBins(bins, angleA, angleB, wedgeState, angleStep) {
+      const sweep = shortestAngleDiff(angleA, angleB);
+      const steps = Math.max(1, Math.ceil(Math.abs(sweep) / angleStep));
+
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        const angle = normalizeAngle(angleA + sweep * t);
+        const binIndex = Math.floor(angle / angleStep) % bins.length;
+
+        if (wedgeState === 1) {
+          bins[binIndex].green += 1;
+        } else {
+          bins[binIndex].red += 1;
+        }
+      }
+    }
+
+    function countToStrength(count, falloff = 0.92) {
+      return 1 - Math.pow(falloff, count);
+    }
+
+    function drawAngleSlice(ctx, startAngle, endAngle, radius, fillStyle) {
+      const startRad = canvasAngle(startAngle);
+      const endRad = canvasAngle(endAngle);
+      const startPoint = pointOnAngle(startAngle, radius);
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(startPoint.x, startPoint.y);
+      ctx.arc(0, 0, radius, startRad, endRad, true);
+      ctx.closePath();
+
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+
+	function drawAccumulatedBins(ctx, bins, radius, angleStep) {
+	  let maxTotalCount = 0;
+
+	  for (let i = 0; i < bins.length; i++) {
+		const totalCount = bins[i].red + bins[i].green;
+
+		if (totalCount > maxTotalCount) {
+		  maxTotalCount = totalCount;
+		}
+	  }
+
+	  if (maxTotalCount === 0) {
+		return;
+	  }
+
+	  for (let i = 0; i < bins.length; i++) {
+		const redCount = bins[i].red;
+		const greenCount = bins[i].green;
+
+		if (redCount === 0 && greenCount === 0) {
+		  continue;
+		}
+
+		const startAngle = i * angleStep;
+		const endAngle = startAngle + angleStep;
+
+		const totalCount = redCount + greenCount;
+
+		// Normalize brightness relative to the strongest bin for this render.
+		const normalizedDensity = totalCount / maxTotalCount;
+
+		// Optional curve:
+		// values < 1 brighten low-density regions
+		// values > 1 darken low-density regions
+		const strength = Math.pow(normalizedDensity, 0.65);
+
+		const alpha = Math.min(
+		  0.9,
+		  0.18 + 0.72 * strength
+		);
+
+		const redRatio = redCount / totalCount;
+		const greenRatio = greenCount / totalCount;
+
+		const redChannel = Math.round(255 * redRatio);
+		const greenChannel = Math.round(255 * greenRatio);
+
+		const fillStyle = `rgba(${redChannel}, ${greenChannel}, 0, ${alpha})`;
+
+		drawAngleSlice(ctx, startAngle, endAngle, radius, fillStyle);
+	  }
+	}
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+
+      for (const canvas of allCanvases) {
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+      }
+
+      for (const ctx of allContexts) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      drawAllLayers();
+    }
+
+    function clearCanvas(ctx, width, height) {
+      ctx.clearRect(0, 0, width, height);
+    }
+
+    function clearAllCanvases(width, height) {
+      for (const ctx of allContexts) {
+        clearCanvas(ctx, width, height);
+      }
+    }
+
+    function getLayoutValues() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      const wedgeRadius = Math.min(width, height) * 0.32;
+
+      return {
+        width,
+        height,
+        centerX: width / 2,
+        centerY: height / 2,
+        wedgeRadius,
+        lineInnerRadius: wedgeRadius,
+        lineOuterRadius: Math.min(width, height) * 0.48,
+        angleStep: 1
+      };
+    }
+
+    function drawWedgeLayer(ctx, data, wedgeRadius, angleStep) {
+      const bins = createAngleBins(angleStep);
+
+      for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+
+        for (let w = 0; w < item.wedges.length; w++) {
+          const wedge = item.wedges[w];
+
+          const wedgeAngleA = wedge[0];
+          const wedgeAngleB = wedge[1];
+          const wedgeState = wedge[2];
+
+          accumulateWedgeInBins(
+            bins,
+            wedgeAngleA,
+            wedgeAngleB,
+            wedgeState,
+            angleStep
+          );
+        }
+      }
+
+      drawAccumulatedBins(
+        ctx,
+        bins,
+        wedgeRadius,
+        angleStep
+      );
+    }
+
+    function drawLineLayer(ctx, data, lineInnerRadius, lineOuterRadius) {
+      for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+
+        const line = item.line;
+        const angleSmall = line[0];
+        const angleBig = line[1];
+        const lineState = line[2];
+
+        drawLine(
+          ctx,
+          angleSmall,
+          angleBig,
+          lineInnerRadius,
+          lineOuterRadius,
+          lineState
+        );
+      }
+    }
+
+    function drawWedgeLayerOnly() {
+      const layout = getLayoutValues();
+      const data = generateData(diff);
+
+      clearCanvas(wedgeCtx, layout.width, layout.height);
+
+      wedgeCtx.save();
+      wedgeCtx.translate(layout.centerX, layout.centerY);
+      drawWedgeLayer(
+        wedgeCtx,
+        data,
+        layout.wedgeRadius,
+        layout.angleStep
+      );
+      wedgeCtx.restore();
+    }
+
+    function drawLineLayerOnly() {
+      const layout = getLayoutValues();
+      const data = generateData(diff);
+
+      clearCanvas(lineCtx, layout.width, layout.height);
+
+      lineCtx.save();
+      lineCtx.translate(layout.centerX, layout.centerY);
+      drawLineLayer(
+        lineCtx,
+        data,
+        layout.lineInnerRadius,
+        layout.lineOuterRadius
+      );
+      lineCtx.restore();
+    }
+
+    function drawAllLayers() {
+      const layout = getLayoutValues();
+
+      clearAllCanvases(layout.width, layout.height);
+
+      drawWedgeLayerOnly();
+      drawLineLayerOnly();
+    }
+
+    function clampDiff(value) {
+      if (Number.isNaN(value)) {
+        return 0;
+      }
+
+      return Math.max(0, Math.min(179, value));
+    }
+
+    diffInput.addEventListener("input", () => {
+      diff = clampDiff(Number(diffInput.value));
+
+      // Only wedge pairings depend on diff.
+      // Lines do not need to be redrawn.
+      drawWedgeLayerOnly();
+    });
+
+    diffInput.addEventListener("change", () => {
+      diff = clampDiff(Number(diffInput.value));
+      diffInput.value = diff;
+      drawWedgeLayerOnly();
+    });
+
+    toggleWedges.addEventListener("change", () => {
+      wedgeCanvas.hidden = !toggleWedges.checked;
+    });
+
+    toggleLines.addEventListener("change", () => {
+      lineCanvas.hidden = !toggleLines.checked;
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
