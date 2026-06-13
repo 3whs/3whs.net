@@ -2,32 +2,86 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Bell Inequality Local Hidden Variables Visualization</title>
+  <title>Bell Inequality Visualization</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     html,
     body {
       margin: 0;
       width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: black;
+      min-height: 100%;
+      background: #000;
+      color: #f0f0f0;
       font-family: system-ui, sans-serif;
+      overflow: auto;
+    }
+
+    body {
+      padding: 16px;
+    }
+
+    #page {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: center;
+      padding: 12px 14px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+    }
+
+    #controls label,
+    .controlMetric {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+      font-size: 15px;
+    }
+
+    #controls input[type="number"] {
+      width: 72px;
+      padding: 4px 6px;
+      background: #1a1a1a;
+      color: #f0f0f0;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+
+    .controlMetric strong {
+      color: #fff;
+      font-weight: 700;
     }
 
     #canvasStack {
       position: relative;
-      width: 100vw;
-      height: 100vh;
-      background: black;
+      width: 100%;
+      height: 68vh;
+      min-height: 420px;
+      background: #000;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
     }
 
     #canvasStack canvas {
       position: absolute;
       inset: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       background: transparent;
+      display: block;
     }
 
     #wedgeCanvas {
@@ -38,79 +92,80 @@
       z-index: 2;
     }
 
-    #controls {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 10;
-      background: rgba(255, 255, 255, 0.88);
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 14px;
-      line-height: 1.6;
+    .graphPanel {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
     }
 
-    #controls label {
+    .graphPanel h3 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .graphCanvas {
       display: block;
-      user-select: none;
+      width: 100%;
+      height: 280px;
+      background: #080808;
+      border: 1px solid #222;
+      border-radius: 6px;
     }
 
-    #diffControl {
-      margin-top: 8px;
-    }
-
-    #diffInput {
-      width: 64px;
+    @media (max-width: 900px) {
+      #canvasStack {
+        height: 56vh;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div id="canvasStack">
-    <canvas id="wedgeCanvas"></canvas>
-    <canvas id="lineCanvas"></canvas>
-  </div>
-
-  <div id="controls">
-    <label>
-      <input type="checkbox" id="toggleWedges" checked>
-      wedges
-    </label>
-
-    <label>
-      <input type="checkbox" id="toggleLines" checked>
-      lines
-    </label>
-
-    <div id="diffControl">
+  <div id="page">
+    <div id="controls">
       <label>
-        diff:
-        <input type="number" id="diffInput" min="0" max="179" step="1" value="15">
+        <input type="number" id="diffInput" min="0" max="180" step="1" value="15">
+        <span>Difference between measurement angles</span>
       </label>
+
+      <span class="controlMetric">
+        Local Hidden Variable results
+        <strong id="lhvValue"></strong>
+      </span>
+
+      <span class="controlMetric">
+        Observed result
+        <strong id="observedValue"></strong>
+      </span>
+    </div>
+
+    <div id="canvasStack">
+      <canvas id="wedgeCanvas"></canvas>
+      <canvas id="lineCanvas"></canvas>
+    </div>
+
+    <div class="graphPanel">
+      <h3>Local Hidden Variable vs Observed / Quantum Mechanics</h3>
+      <canvas id="comparisonGraphCanvas" class="graphCanvas"></canvas>
     </div>
   </div>
 
   <script>
+    const canvasStack = document.getElementById("canvasStack");
+
     const wedgeCanvas = document.getElementById("wedgeCanvas");
     const lineCanvas = document.getElementById("lineCanvas");
+    const comparisonGraphCanvas = document.getElementById("comparisonGraphCanvas");
 
     const wedgeCtx = wedgeCanvas.getContext("2d");
     const lineCtx = lineCanvas.getContext("2d");
+    const comparisonGraphCtx = comparisonGraphCanvas.getContext("2d");
 
-    const toggleWedges = document.getElementById("toggleWedges");
-    const toggleLines = document.getElementById("toggleLines");
     const diffInput = document.getElementById("diffInput");
-
-    const allCanvases = [
-      wedgeCanvas,
-      lineCanvas
-    ];
-
-    const allContexts = [
-      wedgeCtx,
-      lineCtx
-    ];
+    const lhvValue = document.getElementById("lhvValue");
+    const observedValue = document.getElementById("observedValue");
 
     let diff = 15;
 
@@ -119,6 +174,400 @@
       "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111" +
       "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" +
       "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111";
+
+    const lhvDataText = `
+0, 0.00%
+1, 1.11%
+2, 2.22%
+3, 3.33%
+4, 4.44%
+5, 5.56%
+6, 6.67%
+7, 7.78%
+8, 8.89%
+9, 10.00%
+10, 11.11%
+11, 12.22%
+12, 13.33%
+13, 14.44%
+14, 15.56%
+15, 16.67%
+16, 17.78%
+17, 18.89%
+18, 20.00%
+19, 21.11%
+20, 22.22%
+21, 23.33%
+22, 24.44%
+23, 25.56%
+24, 26.67%
+25, 27.78%
+26, 28.89%
+27, 30.00%
+28, 31.11%
+29, 32.22%
+30, 33.33%
+31, 34.44%
+32, 35.56%
+33, 36.67%
+34, 37.78%
+35, 38.89%
+36, 40.00%
+37, 41.11%
+38, 42.22%
+39, 43.33%
+40, 44.44%
+41, 45.56%
+42, 46.67%
+43, 47.78%
+44, 48.89%
+45, 50.00%
+46, 51.11%
+47, 52.22%
+48, 53.33%
+49, 54.44%
+50, 55.56%
+51, 56.67%
+52, 57.78%
+53, 58.89%
+54, 60.00%
+55, 61.11%
+56, 62.22%
+57, 63.33%
+58, 64.44%
+59, 65.56%
+60, 66.67%
+61, 67.78%
+62, 68.89%
+63, 70.00%
+64, 71.11%
+65, 72.22%
+66, 73.33%
+67, 74.44%
+68, 75.56%
+69, 76.67%
+70, 77.78%
+71, 78.89%
+72, 80.00%
+73, 81.11%
+74, 82.22%
+75, 83.33%
+76, 84.44%
+77, 85.56%
+78, 86.67%
+79, 87.78%
+80, 88.89%
+81, 90.00%
+82, 91.11%
+83, 92.22%
+84, 93.33%
+85, 94.44%
+86, 95.56%
+87, 96.67%
+88, 97.78%
+89, 98.89%
+90, 100.00%
+91, 98.89%
+92, 97.78%
+93, 96.67%
+94, 95.56%
+95, 94.44%
+96, 93.33%
+97, 92.22%
+98, 91.11%
+99, 90.00%
+100, 88.89%
+101, 87.78%
+102, 86.67%
+103, 85.56%
+104, 84.44%
+105, 83.33%
+106, 82.22%
+107, 81.11%
+108, 80.00%
+109, 78.89%
+110, 77.78%
+111, 76.67%
+112, 75.56%
+113, 74.44%
+114, 73.33%
+115, 72.22%
+116, 71.11%
+117, 70.00%
+118, 68.89%
+119, 67.78%
+120, 66.67%
+121, 65.56%
+122, 64.44%
+123, 63.33%
+124, 62.22%
+125, 61.11%
+126, 60.00%
+127, 58.89%
+128, 57.78%
+129, 56.67%
+130, 55.56%
+131, 54.44%
+132, 53.33%
+133, 52.22%
+134, 51.11%
+135, 50.00%
+136, 48.89%
+137, 47.78%
+138, 46.67%
+139, 45.56%
+140, 44.44%
+141, 43.33%
+142, 42.22%
+143, 41.11%
+144, 40.00%
+145, 38.89%
+146, 37.78%
+147, 36.67%
+148, 35.56%
+149, 34.44%
+150, 33.33%
+151, 32.22%
+152, 31.11%
+153, 30.00%
+154, 28.89%
+155, 27.78%
+156, 26.67%
+157, 25.56%
+158, 24.44%
+159, 23.33%
+160, 22.22%
+161, 21.11%
+162, 20.00%
+163, 18.89%
+164, 17.78%
+165, 16.67%
+166, 15.56%
+167, 14.44%
+168, 13.33%
+169, 12.22%
+170, 11.11%
+171, 10.00%
+172, 8.89%
+173, 7.78%
+174, 6.67%
+175, 5.56%
+176, 4.44%
+177, 3.33%
+178, 2.22%
+179, 1.11%
+180, 0.00%
+    `;
+
+    const qmDataText = `
+0 0.00%
+1 0.03%
+2 0.12%
+3 0.27%
+4 0.49%
+5 0.76%
+6 1.09%
+7 1.49%
+8 1.94%
+9 2.45%
+10 3.02%
+11 3.64%
+12 4.32%
+13 5.06%
+14 5.85%
+15 6.70%
+16 7.60%
+17 8.55%
+18 9.55%
+19 10.60%
+20 11.70%
+21 12.84%
+22 14.03%
+23 15.27%
+24 16.54%
+25 17.86%
+26 19.22%
+27 20.61%
+28 22.04%
+29 23.50%
+30 25.00%
+31 26.53%
+32 28.08%
+33 29.66%
+34 31.27%
+35 32.90%
+36 34.55%
+37 36.22%
+38 37.90%
+39 39.60%
+40 41.32%
+41 43.04%
+42 44.77%
+43 46.51%
+44 48.26%
+45 50.00%
+46 51.74%
+47 53.49%
+48 55.23%
+49 56.96%
+50 58.68%
+51 60.40%
+52 62.10%
+53 63.78%
+54 65.45%
+55 67.10%
+56 68.73%
+57 70.34%
+58 71.92%
+59 73.47%
+60 75.00%
+61 76.50%
+62 77.96%
+63 79.39%
+64 80.78%
+65 82.14%
+66 83.46%
+67 84.73%
+68 85.97%
+69 87.16%
+70 88.30%
+71 89.40%
+72 90.45%
+73 91.45%
+74 92.40%
+75 93.30%
+76 94.15%
+77 94.94%
+78 95.68%
+79 96.36%
+80 96.98%
+81 97.55%
+82 98.06%
+83 98.51%
+84 98.91%
+85 99.24%
+86 99.51%
+87 99.73%
+88 99.88%
+89 99.97%
+90 100.00%
+91 99.97%
+92 99.88%
+93 99.73%
+94 99.51%
+95 99.24%
+96 98.91%
+97 98.51%
+98 98.06%
+99 97.55%
+100 96.98%
+101 96.36%
+102 95.68%
+103 94.94%
+104 94.15%
+105 93.30%
+106 92.40%
+107 91.45%
+108 90.45%
+109 89.40%
+110 88.30%
+111 87.16%
+112 85.97%
+113 84.73%
+114 83.46%
+115 82.14%
+116 80.78%
+117 79.39%
+118 77.96%
+119 76.50%
+120 75.00%
+121 73.47%
+122 71.92%
+123 70.34%
+124 68.73%
+125 67.10%
+126 65.45%
+127 63.78%
+128 62.10%
+129 60.40%
+130 58.68%
+131 56.96%
+132 55.23%
+133 53.49%
+134 51.74%
+135 50.00%
+136 48.26%
+137 46.51%
+138 44.77%
+139 43.04%
+140 41.32%
+141 39.60%
+142 37.90%
+143 36.22%
+144 34.55%
+145 32.90%
+146 31.27%
+147 29.66%
+148 28.08%
+149 26.53%
+150 25.00%
+151 23.50%
+152 22.04%
+153 20.61%
+154 19.22%
+155 17.86%
+156 16.54%
+157 15.27%
+158 14.03%
+159 12.84%
+160 11.70%
+161 10.60%
+162 9.55%
+163 8.55%
+164 7.60%
+165 6.70%
+166 5.85%
+167 5.06%
+168 4.32%
+169 3.64%
+170 3.02%
+171 2.45%
+172 1.94%
+173 1.49%
+174 1.09%
+175 0.76%
+176 0.49%
+177 0.27%
+178 0.12%
+179 0.03%
+180 0.00%
+    `;
+
+    function parseDataset(text) {
+      return text
+        .trim()
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const match = line.match(/^(\d+)\s*,?\s*([0-9.]+)%$/);
+
+          if (!match) {
+            throw new Error(`Could not parse dataset line: "${line}"`);
+          }
+
+          return {
+            diff: Number(match[1]),
+            percentSame: Number(match[2])
+          };
+        });
+    }
+
+    const lhvData = parseDataset(lhvDataText);
+    const qmData = parseDataset(qmDataText);
+
+    const lhvDataByDiff = new Map(lhvData.map(row => [row.diff, row.percentSame]));
+    const qmDataByDiff = new Map(qmData.map(row => [row.diff, row.percentSame]));
 
     function generateData(diff) {
       const data = [];
@@ -167,7 +616,11 @@
     }
 
     function getLineColor(lineState) {
-      return lineState === 1 ? "green" : "red";
+      return lineState === 1 ? "#00ff66" : "#ff3333";
+    }
+
+    function getOppositeLineColor(lineState) {
+      return lineState === 1 ? "#ff3333" : "#00ff66";
     }
 
     function degToRad(degrees) {
@@ -195,33 +648,27 @@
       return ((toAngle - fromAngle + 540) % 360) - 180;
     }
 
-	function getOppositeLineColor(lineState) {
-	  return lineState === 1 ? "red" : "green";
-	}
+    function drawLineSegment(ctx, angle, innerRadius, outerRadius, lineState) {
+      const midRadius = innerRadius + (outerRadius - innerRadius) / 2;
 
-	function drawLineSegment(ctx, angle, innerRadius, outerRadius, lineState) {
-	  const midRadius = innerRadius + (outerRadius - innerRadius) / 2;
+      const innerPoint = pointOnAngle(angle, innerRadius);
+      const midPoint = pointOnAngle(angle, midRadius);
+      const outerPoint = pointOnAngle(angle, outerRadius);
 
-	  const innerPoint = pointOnAngle(angle, innerRadius);
-	  const midPoint = pointOnAngle(angle, midRadius);
-	  const outerPoint = pointOnAngle(angle, outerRadius);
+      ctx.beginPath();
+      ctx.moveTo(innerPoint.x, innerPoint.y);
+      ctx.lineTo(midPoint.x, midPoint.y);
+      ctx.strokeStyle = getLineColor(lineState);
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
-	  // First half: original line color
-	  ctx.beginPath();
-	  ctx.moveTo(innerPoint.x, innerPoint.y);
-	  ctx.lineTo(midPoint.x, midPoint.y);
-	  ctx.strokeStyle = getLineColor(lineState);
-	  ctx.lineWidth = 2;
-	  ctx.stroke();
-
-	  // Second half: opposite line color
-	  ctx.beginPath();
-	  ctx.moveTo(midPoint.x, midPoint.y);
-	  ctx.lineTo(outerPoint.x, outerPoint.y);
-	  ctx.strokeStyle = getOppositeLineColor(lineState);
-	  ctx.lineWidth = 2;
-	  ctx.stroke();
-	}
+      ctx.beginPath();
+      ctx.moveTo(midPoint.x, midPoint.y);
+      ctx.lineTo(outerPoint.x, outerPoint.y);
+      ctx.strokeStyle = getOppositeLineColor(lineState);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
 
     function drawLine(ctx, angleA, angleB, innerRadius, outerRadius, lineState) {
       drawLineSegment(ctx, angleA, innerRadius, outerRadius, lineState);
@@ -232,8 +679,9 @@
       const binCount = Math.round(360 / angleStep);
 
       return Array.from({ length: binCount }, () => ({
-        red: 0,
-        green: 0
+        totalOverlapCount: 0,
+        redOverlapCount: 0,
+        greenOverlapCount: 0
       }));
     }
 
@@ -245,17 +693,16 @@
         const t = i / steps;
         const angle = normalizeAngle(angleA + sweep * t);
         const binIndex = Math.floor(angle / angleStep) % bins.length;
+        const bin = bins[binIndex];
+
+        bin.totalOverlapCount += 1;
 
         if (wedgeState === 1) {
-          bins[binIndex].green += 1;
+          bin.greenOverlapCount += 1;
         } else {
-          bins[binIndex].red += 1;
+          bin.redOverlapCount += 1;
         }
       }
-    }
-
-    function countToStrength(count, falloff = 0.92) {
-      return 1 - Math.pow(falloff, count);
     }
 
     function drawAngleSlice(ctx, startAngle, endAngle, radius, fillStyle) {
@@ -273,88 +720,92 @@
       ctx.fill();
     }
 
-	function drawAccumulatedBins(ctx, bins, radius, angleStep) {
-	  let maxTotalCount = 0;
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
 
-	  for (let i = 0; i < bins.length; i++) {
-		const totalCount = bins[i].red + bins[i].green;
+	function getAngleBinFillStyle(bin) {
+	  const totalOverlapCount = bin.totalOverlapCount;
+	  const greenOverlapCount = bin.greenOverlapCount;
 
-		if (totalCount > maxTotalCount) {
-		  maxTotalCount = totalCount;
-		}
+	  if (totalOverlapCount === 0) {
+		return null;
 	  }
 
-	  if (maxTotalCount === 0) {
-		return;
+	  const greenRatio = greenOverlapCount / totalOverlapCount;
+
+	  const redColor = { r: 255, g: 0, b: 0 };
+	  const blackColor = { r: 0, g: 0, b: 0 };
+	  const greenColor = { r: 0, g: 255, b: 0 };
+
+	  let r;
+	  let g;
+	  let b;
+
+	  if (greenRatio <= 0.5) {
+		const t = greenRatio / 0.5;
+
+		r = Math.round(lerp(redColor.r, blackColor.r, t));
+		g = Math.round(lerp(redColor.g, blackColor.g, t));
+		b = Math.round(lerp(redColor.b, blackColor.b, t));
+	  } else {
+		const t = (greenRatio - 0.5) / 0.5;
+
+		r = Math.round(lerp(blackColor.r, greenColor.r, t));
+		g = Math.round(lerp(blackColor.g, greenColor.g, t));
+		b = Math.round(lerp(blackColor.b, greenColor.b, t));
 	  }
 
-	  for (let i = 0; i < bins.length; i++) {
-		const redCount = bins[i].red;
-		const greenCount = bins[i].green;
+	  const alpha = 0.95;
 
-		if (redCount === 0 && greenCount === 0) {
-		  continue;
-		}
-
-		const startAngle = i * angleStep;
-		const endAngle = startAngle + angleStep;
-
-		const totalCount = redCount + greenCount;
-
-		// Normalize brightness relative to the strongest bin for this render.
-		const normalizedDensity = totalCount / maxTotalCount;
-
-		// Optional curve:
-		// values < 1 brighten low-density regions
-		// values > 1 darken low-density regions
-		const strength = Math.pow(normalizedDensity, 0.65);
-
-		const alpha = Math.min(
-		  0.9,
-		  0.18 + 0.72 * strength
-		);
-
-		const redRatio = redCount / totalCount;
-		const greenRatio = greenCount / totalCount;
-
-		const redChannel = Math.round(255 * redRatio);
-		const greenChannel = Math.round(255 * greenRatio);
-
-		const fillStyle = `rgba(${redChannel}, ${greenChannel}, 0, ${alpha})`;
-
-		drawAngleSlice(ctx, startAngle, endAngle, radius, fillStyle);
-	  }
+	  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 	}
 
-    function resizeCanvas() {
+    function drawAccumulatedBins(ctx, bins, radius, angleStep) {
+      for (let i = 0; i < bins.length; i++) {
+        const bin = bins[i];
+        const fillStyle = getAngleBinFillStyle(bin);
+
+        if (!fillStyle) {
+          continue;
+        }
+
+        const startAngle = i * angleStep;
+        const endAngle = startAngle + angleStep;
+
+        drawAngleSlice(ctx, startAngle, endAngle, radius, fillStyle);
+      }
+    }
+
+    function resizeCanvasToElement(canvas, ctx) {
       const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
 
-      for (const canvas of allCanvases) {
-        canvas.width = window.innerWidth * dpr;
-        canvas.height = window.innerHeight * dpr;
-      }
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
 
-      for (const ctx of allContexts) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function resizeAllCanvases() {
+      resizeCanvasToElement(wedgeCanvas, wedgeCtx);
+      resizeCanvasToElement(lineCanvas, lineCtx);
+      resizeCanvasToElement(comparisonGraphCanvas, comparisonGraphCtx);
 
       drawAllLayers();
+      drawGraphs();
+      updateDiffInfo();
     }
 
-    function clearCanvas(ctx, width, height) {
-      ctx.clearRect(0, 0, width, height);
+    function clearCanvas(ctx) {
+      const rect = ctx.canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
     }
 
-    function clearAllCanvases(width, height) {
-      for (const ctx of allContexts) {
-        clearCanvas(ctx, width, height);
-      }
-    }
-
-    function getLayoutValues() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-
+    function getVisualizationLayout() {
+      const rect = canvasStack.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
       const wedgeRadius = Math.min(width, height) * 0.32;
 
       return {
@@ -377,7 +828,6 @@
 
         for (let w = 0; w < item.wedges.length; w++) {
           const wedge = item.wedges[w];
-
           const wedgeAngleA = wedge[0];
           const wedgeAngleB = wedge[1];
           const wedgeState = wedge[2];
@@ -392,12 +842,7 @@
         }
       }
 
-      drawAccumulatedBins(
-        ctx,
-        bins,
-        wedgeRadius,
-        angleStep
-      );
+      drawAccumulatedBins(ctx, bins, wedgeRadius, angleStep);
     }
 
     function drawLineLayer(ctx, data, lineInnerRadius, lineOuterRadius) {
@@ -421,10 +866,10 @@
     }
 
     function drawWedgeLayerOnly() {
-      const layout = getLayoutValues();
+      const layout = getVisualizationLayout();
       const data = generateData(diff);
 
-      clearCanvas(wedgeCtx, layout.width, layout.height);
+      clearCanvas(wedgeCtx);
 
       wedgeCtx.save();
       wedgeCtx.translate(layout.centerX, layout.centerY);
@@ -438,10 +883,10 @@
     }
 
     function drawLineLayerOnly() {
-      const layout = getLayoutValues();
+      const layout = getVisualizationLayout();
       const data = generateData(diff);
 
-      clearCanvas(lineCtx, layout.width, layout.height);
+      clearCanvas(lineCtx);
 
       lineCtx.save();
       lineCtx.translate(layout.centerX, layout.centerY);
@@ -455,12 +900,189 @@
     }
 
     function drawAllLayers() {
-      const layout = getLayoutValues();
-
-      clearAllCanvases(layout.width, layout.height);
-
       drawWedgeLayerOnly();
       drawLineLayerOnly();
+    }
+
+    function drawComparisonGraph(ctx, lhvData, qmData, selectedDiff) {
+      const rect = ctx.canvas.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+
+      clearCanvas(ctx);
+
+      ctx.fillStyle = "#080808";
+      ctx.fillRect(0, 0, width, height);
+
+      const margin = {
+        top: 22,
+        right: 24,
+        bottom: 40,
+        left: 48
+      };
+
+      const plotWidth = width - margin.left - margin.right;
+      const plotHeight = height - margin.top - margin.bottom;
+
+      function xForDiff(value) {
+        return margin.left + (value / 180) * plotWidth;
+      }
+
+      function yForPercent(value) {
+        return margin.top + plotHeight - (value / 100) * plotHeight;
+      }
+
+      ctx.strokeStyle = "#242424";
+      ctx.lineWidth = 1;
+
+      const yTicks = [0, 25, 50, 75, 100];
+
+      for (const tick of yTicks) {
+        const y = yForPercent(tick);
+
+        ctx.beginPath();
+        ctx.moveTo(margin.left, y);
+        ctx.lineTo(width - margin.right, y);
+        ctx.stroke();
+      }
+
+      const xTicks = [0, 45, 90, 135, 180];
+
+      for (const tick of xTicks) {
+        const x = xForDiff(tick);
+
+        ctx.beginPath();
+        ctx.moveTo(x, margin.top);
+        ctx.lineTo(x, height - margin.bottom);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "#aaaaaa";
+      ctx.lineWidth = 1.25;
+
+      ctx.beginPath();
+      ctx.moveTo(margin.left, margin.top);
+      ctx.lineTo(margin.left, height - margin.bottom);
+      ctx.lineTo(width - margin.right, height - margin.bottom);
+      ctx.stroke();
+
+      ctx.fillStyle = "#cfcfcf";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+
+      for (const tick of yTicks) {
+        const y = yForPercent(tick);
+        ctx.fillText(`${tick}%`, margin.left - 8, y);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      for (const tick of xTicks) {
+        const x = xForDiff(tick);
+        ctx.fillText(`${tick}`, x, height - margin.bottom + 8);
+      }
+
+      function drawDataLine(data, color, lineWidth) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i];
+          const x = xForDiff(row.diff);
+          const y = yForPercent(row.percentSame);
+
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+
+        ctx.stroke();
+      }
+
+      drawDataLine(lhvData, "#42a5f5", 2.5);
+      drawDataLine(qmData, "#ffd54f", 2.5);
+
+      const selectedLhv = lhvData.find(row => row.diff === selectedDiff);
+      const selectedQm = qmData.find(row => row.diff === selectedDiff);
+      const selectedX = xForDiff(selectedDiff);
+
+      ctx.strokeStyle = "#888";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(selectedX, margin.top);
+      ctx.lineTo(selectedX, height - margin.bottom);
+      ctx.stroke();
+
+      function drawPoint(row, color) {
+        if (!row) {
+          return;
+        }
+
+        const x = xForDiff(row.diff);
+        const y = yForPercent(row.percentSame);
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      drawPoint(selectedLhv, "#7cc4ff");
+      drawPoint(selectedQm, "#ffe082");
+
+      const legendX = margin.left + 8;
+      const legendY = margin.top + 8;
+
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+
+      ctx.fillStyle = "#42a5f5";
+      ctx.fillRect(legendX, legendY - 5, 18, 3);
+
+      ctx.fillStyle = "#cfcfcf";
+      ctx.fillText("Local Hidden Variable", legendX + 26, legendY);
+
+      ctx.fillStyle = "#ffd54f";
+      ctx.fillRect(legendX, legendY + 17, 18, 3);
+
+      ctx.fillStyle = "#cfcfcf";
+      ctx.fillText("Observed / Quantum Mechanics", legendX + 26, legendY + 22);
+    }
+
+    function drawGraphs() {
+      drawComparisonGraph(
+        comparisonGraphCtx,
+        lhvData,
+        qmData,
+        diff
+      );
+    }
+
+    function formatPercent(value) {
+      return `${value.toFixed(2)}%`;
+    }
+
+    function updateDiffInfo() {
+      const lhvPercent = lhvDataByDiff.get(diff);
+      const qmPercent = qmDataByDiff.get(diff);
+
+      lhvValue.textContent = lhvPercent !== undefined
+        ? formatPercent(lhvPercent)
+        : "n/a";
+
+      observedValue.textContent = qmPercent !== undefined
+        ? formatPercent(qmPercent)
+        : "n/a";
     }
 
     function clampDiff(value) {
@@ -468,33 +1090,31 @@
         return 0;
       }
 
-      return Math.max(0, Math.min(179, value));
+      return Math.max(0, Math.min(180, value));
+    }
+
+    function updateForDiffChange() {
+      drawWedgeLayerOnly();
+      drawGraphs();
+      updateDiffInfo();
     }
 
     diffInput.addEventListener("input", () => {
       diff = clampDiff(Number(diffInput.value));
-
-      // Only wedge pairings depend on diff.
-      // Lines do not need to be redrawn.
-      drawWedgeLayerOnly();
+      updateForDiffChange();
     });
 
     diffInput.addEventListener("change", () => {
       diff = clampDiff(Number(diffInput.value));
       diffInput.value = diff;
-      drawWedgeLayerOnly();
+      updateForDiffChange();
     });
 
-    toggleWedges.addEventListener("change", () => {
-      wedgeCanvas.hidden = !toggleWedges.checked;
-    });
+    window.addEventListener("resize", resizeAllCanvases);
 
-    toggleLines.addEventListener("change", () => {
-      lineCanvas.hidden = !toggleLines.checked;
-    });
-
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
+    resizeAllCanvases();
+    diffInput.value = diff;
+    updateDiffInfo();
   </script>
 </body>
 </html>
